@@ -1,0 +1,70 @@
+# Ronald Filmmaker — configuração para hospedagem compartilhada (Apache/cPanel).
+# Sem isso, qualquer rota que não seja a home (ex: /portfolio ou
+# /portfolio/campo-azul) retorna 404 ao ser acessada direto ou recarregada,
+# porque o site é uma SPA: só existe um arquivo index.html de verdade, e o
+# React Router decide o resto no navegador.
+
+<IfModule mod_rewrite.c>
+  RewriteEngine On
+  RewriteBase /
+
+  # Força HTTPS (a maioria dos provedores cPanel já emite SSL grátis via
+  # AutoSSL/Let's Encrypt). Comente as duas linhas abaixo se o domínio ainda
+  # não tiver certificado ativo.
+  RewriteCond %{HTTPS} off
+  RewriteRule ^ https://%{HTTP_HOST}%{REQUEST_URI} [L,R=301]
+
+  # Arquivos e pastas que realmente existem (JS, CSS, imagens, vídeos, o
+  # próprio index.html) são servidos normalmente.
+  RewriteCond %{REQUEST_FILENAME} -f [OR]
+  RewriteCond %{REQUEST_FILENAME} -d
+  RewriteRule ^ - [L]
+
+  # Qualquer outra rota cai no index.html, e o React Router assume dali.
+  RewriteRule ^ index.html [L]
+</IfModule>
+
+# Alguns servidores Apache mais antigos não reconhecem .wasm por padrão e
+# acabam servindo com um Content-Type genérico. Na prática isso não quebra
+# o compactador de vídeo do painel (src/lib/videoCompression.ts força o
+# tipo correto no navegador ao ler o arquivo), mas declarar aqui é o
+# correto e evita qualquer comportamento estranho de cache/proxy no meio do
+# caminho baseado no Content-Type.
+<IfModule mod_mime.c>
+  AddType application/wasm .wasm
+</IfModule>
+
+# Cache agressivo para os arquivos com hash no nome (JS/CSS/fontes do build
+# do Vite mudam de nome a cada deploy, então é seguro cachear por 1 ano).
+# O mesmo vale para os binários do ffmpeg.wasm em /ffmpeg-core-*/ (copiados
+# por scripts/copy-ffmpeg-core.mjs): o nome da pasta já embute a versão, então
+# uma troca de versão automaticamente vira uma URL nova.
+<IfModule mod_expires.c>
+  ExpiresActive On
+  ExpiresByType text/css "access plus 1 year"
+  ExpiresByType application/javascript "access plus 1 year"
+  ExpiresByType application/wasm "access plus 1 year"
+  ExpiresByType font/woff2 "access plus 1 year"
+  ExpiresByType font/woff "access plus 1 year"
+  ExpiresByType image/webp "access plus 1 month"
+  ExpiresByType video/mp4 "access plus 1 month"
+  ExpiresByType text/html "access plus 0 seconds"
+</IfModule>
+
+<IfModule mod_deflate.c>
+  AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
+</IfModule>
+
+# Cross-origin isolation — unlocks ffmpeg.wasm's multi-threaded core in the
+# admin panel's video compactor (several times faster, same quality; see
+# src/lib/videoCompression.ts). "credentialless" (not the stricter
+# "require-corp") is used on purpose so the site's own images/video from
+# Firebase Storage and the YouTube/Vimeo embeds on project pages keep
+# loading normally without needing those third parties to opt in — this can
+# only make video compression faster, it never breaks anything, even on a
+# host where mod_headers isn't available (the <IfModule> below just skips
+# quietly and compression falls back to its single-threaded core).
+<IfModule mod_headers.c>
+  Header set Cross-Origin-Opener-Policy "same-origin"
+  Header set Cross-Origin-Embedder-Policy "credentialless"
+</IfModule>

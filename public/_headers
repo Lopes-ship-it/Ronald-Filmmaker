@@ -1,0 +1,26 @@
+# Netlify header config.
+#
+# Cross-Origin-Opener-Policy + Cross-Origin-Embedder-Policy put the page
+# into "cross-origin isolated" mode, which is what unlocks ffmpeg.wasm's
+# multi-threaded core in src/lib/videoCompression.ts (several times faster
+# video compression in the admin panel, at no quality cost). Embedder-Policy
+# is set to "credentialless" rather than the stricter "require-corp" on
+# purpose: "credentialless" still lets ordinary cross-origin resources (the
+# site's own images/video served from Firebase Storage, the YouTube/Vimeo
+# embeds on project pages) load normally without needing those third
+# parties to opt in with their own CORP/CORS headers — it only strips
+# credentials (cookies) from those cross-origin requests, which this site
+# never relied on anyway. If a browser doesn't understand "credentialless"
+# it simply won't enter cross-origin isolated mode, and video compression
+# transparently falls back to its single-threaded core — nothing breaks
+# either way, this header can only make compression faster, never break it.
+/*
+  Cross-Origin-Opener-Policy: same-origin
+  Cross-Origin-Embedder-Policy: credentialless
+
+# ffmpeg.wasm core binaries, self-hosted (see scripts/copy-ffmpeg-core.mjs
+# and src/lib/videoCompression.ts) — the folder name embeds the exact
+# version, so it's safe to cache these as long as possible; a version bump
+# is a new folder/URL, never a stale file served from an old cache.
+/ffmpeg-core*/*
+  Cache-Control: public, max-age=31536000, immutable

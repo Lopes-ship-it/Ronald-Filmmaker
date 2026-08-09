@@ -1,0 +1,35 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+node_modules
+dist
+dist-ssr
+*.local
+
+# Copied in from node_modules by scripts/copy-ffmpeg-core.mjs (runs on
+# postinstall/predev/prebuild) — the ffmpeg.wasm core binaries this site
+# self-hosts for the admin panel's browser-side video compressor. Not
+# source, regenerated automatically; not worth committing (~65MB).
+public/ffmpeg-core-*/
+
+# This project does not use .env files (Firebase web config is intentionally
+# hardcoded in src/lib/firebase.ts — it is not a secret). This ignore rule is
+# just a safety net in case one gets created locally by mistake.
+.env
+
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea
+.DS_Store
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
