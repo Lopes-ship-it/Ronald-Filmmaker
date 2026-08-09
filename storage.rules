@@ -1,0 +1,49 @@
+rules_version = '2';
+
+// Same model as firestore.rules: any signed-in Firebase user is the admin
+// (no public sign-up exists), so uploads/deletes require an auth session —
+// never enforced only by hiding the upload UI. Media is public-read since
+// it's all published-site imagery/video.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /portfolio/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    match /media/{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+
+    // Server-side video processing pipeline (functions/src/processVideo.ts).
+    // videos/original/ is temporary: the admin panel uploads the raw file
+    // there (see src/lib/videoServerProcessing.ts), a Cloud Function picks
+    // it up, and it's deleted once processing finishes — never linked from
+    // the public site, so it's admin-read only, not public. Real, server-
+    // enforced validation, not just the client's own pre-check
+    // (src/lib/videoUpload.ts): size and content-type are checked here too,
+    // so a tampered request can't skip either.
+    match /videos/original/{allPaths=**} {
+      allow read, delete: if request.auth != null;
+      allow write: if request.auth != null
+        && request.resource.size < 500 * 1024 * 1024
+        && request.resource.contentType.matches('video/.*');
+    }
+
+    // videos/optimized/ and videos/thumbnails/ are the pipeline's output —
+    // public read since these are exactly what the public site embeds.
+    // Write is "if false" for everyone, including a signed-in admin's own
+    // browser: only the Cloud Functions' Admin SDK writes here (Admin SDK
+    // calls always bypass these rules entirely), so a compromised or
+    // buggy client can never plant or replace a "processed" video/
+    // thumbnail directly.
+    match /videos/optimized/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+    match /videos/thumbnails/{allPaths=**} {
+      allow read: if true;
+      allow write: if false;
+    }
+  }
+}
