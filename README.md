@@ -35,7 +35,7 @@ Não precisa escolher entre eles: os três arquivos convivem no projeto e cada h
 
 Esse é o caminho para quem já tem domínio + hospedagem compartilhada paga (o caso mais comum no Brasil):
 
-1. Gere o build de produção (local, com Node instalado): `npm install && npm run build`. Isso cria a pasta `dist/` com o site inteiro já pronto, HTML/CSS/JS estáticos — não precisa de Node rodando no servidor, é hospedagem estática comum. `dist/` fica em torno de **80MB** porque inclui os binários do compactador de vídeo do navegador (`ffmpeg-core-*/`, ~65MB — ver scripts/copy-ffmpeg-core.mjs); confirme que o plano de hospedagem tem espaço/tempo de envio suficiente antes de subir tudo por FTP.
+1. Gere o build de produção (local, com Node instalado): `npm install && npm run build`. Isso cria a pasta `dist/` com o site inteiro já pronto, HTML/CSS/JS estáticos — não precisa de Node rodando no servidor, é hospedagem estática comum. `dist/` fica em torno de **50MB** porque inclui o binário do compactador de vídeo do navegador (`ffmpeg-core-*/`, ~32MB — ver scripts/copy-ffmpeg-core.mjs); confirme que o plano de hospedagem tem espaço/tempo de envio suficiente antes de subir tudo por FTP.
 2. No cPanel, abra o **Gerenciador de Arquivos** (ou conecte por FTP/SFTP) e vá até a pasta que o domínio serve. Normalmente é `public_html/` para o domínio principal, ou `public_html/nome-do-subdominio/` para um subdomínio/domínio adicional — confira em **Domínios** dentro do cPanel qual é o "Document Root" do domínio em questão.
 3. Envie **o conteúdo de dentro de `dist/`** para essa pasta (o `index.html` deve ficar direto em `public_html/`, não dentro de uma subpasta `dist/`).
 4. O arquivo `.htaccess` já vai junto dentro de `dist/` (o Vite copia ele automaticamente de `public/.htaccess`) — só confirme que ele chegou no servidor, porque alguns clientes de FTP escondem arquivos que começam com ponto por padrão. Sem ele, só a home carrega; `/portfolio` e as páginas de projeto dão 404 ao acessar direto pela URL.
@@ -67,7 +67,7 @@ src/
   sections/           Seções de página reaproveitáveis (Hero, About, Services, Portfolio preview, Process, Equipment, Contact)
   App.tsx             Roteador (React Router) + carregamento dos dados globais + code-splitting por rota
 functions/              Cloud Functions (Node/TypeScript, projeto separado): compressão/otimização de vídeo com FFmpeg no servidor — ver functions/README.md
-scripts/copy-ffmpeg-core.mjs   Copia os binários do ffmpeg.wasm (@ffmpeg/core e @ffmpeg/core-mt) de node_modules para public/, para o site self-host-ar (rodado automaticamente por "npm install"/"npm run dev"/"npm run build")
+scripts/copy-ffmpeg-core.mjs   Copia o binário do ffmpeg.wasm (@ffmpeg/core) de node_modules para public/, para o site self-host-ar (rodado automaticamente por "npm install"/"npm run dev"/"npm run build")
 firestore.rules        Regras de segurança do Firestore — toda autorização de escrita é garantida aqui, não pela interface
 storage.rules           Regras de segurança do Firebase Storage
 firebase.json / .firebaserc   Configuração do Firebase CLI (deploy de rules, hosting e functions)

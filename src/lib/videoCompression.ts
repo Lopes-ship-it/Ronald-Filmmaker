@@ -5,7 +5,11 @@ import { fetchFile } from "@ffmpeg/util";
  * Compression runs entirely in the browser via ffmpeg.wasm — no server, no
  * VPS, works with static hosting. The tradeoff (chosen deliberately): it
  * uses whatever CPU the person uploading has, so a very long file on a weak
- * laptop will take a while.
+ * laptop will take a while. This only ever runs as the automatic fallback
+ * for the server-side Cloud Functions pipeline (see
+ * src/lib/videoServerProcessing.ts) — when that pipeline is unavailable,
+ * not as the primary path — so raw speed matters less than reliability
+ * here.
  *
  * The ffmpeg-core binary (~30MB) is self-hosted from this site's own
  * `public/` folder (copied in from node_modules at build/install time by
@@ -20,27 +24,31 @@ import { fetchFile } from "@ffmpeg/util";
  * by this site's own long-lived caching (see public/.htaccess /
  * public/_headers / vercel.json), rather than depending on unpkg's.
  *
- * Two core builds ship this way: the regular single-threaded core, and
- * `@ffmpeg/core-mt`, which spreads the encode across every CPU core the
- * machine has — several times faster on a modern multi-core laptop, at no
- * quality cost (same libx264 settings either way). The multi-threaded core
- * only works when the page is "cross-origin isolated" (a browser security
- * mode the site opts into via response headers — see public/_headers,
- * public/.htaccess, and vercel.json), which some shared-hosting setups
- * strip in transit. `crossOriginIsolated` below reports whether that
- * actually happened for this page load; when it didn't (or the
- * multi-threaded core fails to load for any other reason) this
- * transparently falls back to the single-threaded core exactly as before,
- * so compression itself never breaks — cross-origin isolation only ever
- * changes how fast it runs, never whether it works.
+ * This deliberately only ships the single-threaded core, not
+ * `@ffmpeg/core-mt`. An earlier version of this file also loaded the
+ * multi-threaded core when the page was "cross-origin isolated" (a mode
+ * unlocked by setting Cross-Origin-Opener-Policy +
+ * Cross-Origin-Embedder-Policy site-wide) — several times faster on a
+ * multi-core machine, at no quality cost. That was reverted after it was
+ * found in production to break two things at once: it blocked the
+ * YouTube/Vimeo `<iframe>` embeds on the public portfolio pages (COEP
+ * requires embedded cross-origin frames to opt in with their own header,
+ * which YouTube/Vimeo obviously don't do for this site), and — on at
+ * least one real browser (Microsoft Edge) — it blocked ffmpeg.wasm's own
+ * dedicated Worker script from loading at all, which hung the compressor
+ * indefinitely on the exact page that needs it (the admin upload screen).
+ * Scoping the header to `/admin` only wouldn't have fixed the second
+ * problem, since that's precisely where the worker needs to load — so the
+ * header was removed everywhere instead. The result: video compression in
+ * this fallback runs single-threaded, slower than it could in principle,
+ * but it actually works, and the site's third-party embeds work too.
  */
 
 const CORE_VERSION = "0.12.10";
 // Must match scripts/copy-ffmpeg-core.mjs's CORE_VERSION and output folder
-// names exactly — that script is what actually puts these files in
+// name exactly — that script is what actually puts these files in
 // public/ (and, from there, into the deployed site's document root).
 const CORE_BASE_URL = `/ffmpeg-core-${CORE_VERSION}`;
-const CORE_MT_BASE_URL = `/ffmpeg-core-mt-${CORE_VERSION}`;
 
 /**
  * A plain `await` on the core's fetch has no ceiling. Self-hosting (above)
@@ -117,14 +125,11 @@ async function fetchCoreFileAsBlobURL(url: string, mimeType: string): Promise<st
   return URL.createObjectURL(blob);
 }
 
-async function loadCore(baseURL: string, multiThreaded: boolean): Promise<FFmpeg> {
+async function loadCore(baseURL: string): Promise<FFmpeg> {
   const ffmpeg = new FFmpeg();
   await ffmpeg.load({
     coreURL: await fetchCoreFileAsBlobURL(`${baseURL}/ffmpeg-core.js`, "text/javascript"),
     wasmURL: await fetchCoreFileAsBlobURL(`${baseURL}/ffmpeg-core.wasm`, "application/wasm"),
-    ...(multiThreaded
-      ? { workerURL: await fetchCoreFileAsBlobURL(`${baseURL}/ffmpeg-core.worker.js`, "text/javascript") }
-      : {}),
   });
   return ffmpeg;
 }
@@ -133,23 +138,8 @@ async function loadFFmpeg(): Promise<FFmpeg> {
   if (ffmpegInstance) return ffmpegInstance;
   if (!loadPromise) {
     loadPromise = (async () => {
-      if (typeof window !== "undefined" && window.crossOriginIsolated) {
-        try {
-          const ffmpeg = await withTimeout(
-            loadCore(CORE_MT_BASE_URL, true),
-            ENGINE_LOAD_TIMEOUT_MS,
-            "Tempo esgotado carregando o compactador (multi-thread).",
-          );
-          ffmpegInstance = ffmpeg;
-          return ffmpeg;
-        } catch {
-          // Fall through to the single-threaded core below — a stall,
-          // timeout, or unexpected browser quirk on the multi-threaded path
-          // should never take video upload down entirely.
-        }
-      }
       const ffmpeg = await withTimeout(
-        loadCore(CORE_BASE_URL, false),
+        loadCore(CORE_BASE_URL),
         ENGINE_LOAD_TIMEOUT_MS,
         "Não foi possível carregar o compactador de vídeo. Verifique sua conexão com a internet e tente novamente — se persistir, tente recarregar a página.",
       );

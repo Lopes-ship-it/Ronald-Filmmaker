@@ -55,16 +55,15 @@
   AddOutputFilterByType DEFLATE text/html text/css application/javascript application/json image/svg+xml
 </IfModule>
 
-# Cross-origin isolation — unlocks ffmpeg.wasm's multi-threaded core in the
-# admin panel's video compactor (several times faster, same quality; see
-# src/lib/videoCompression.ts). "credentialless" (not the stricter
-# "require-corp") is used on purpose so the site's own images/video from
-# Firebase Storage and the YouTube/Vimeo embeds on project pages keep
-# loading normally without needing those third parties to opt in — this can
-# only make video compression faster, it never breaks anything, even on a
-# host where mod_headers isn't available (the <IfModule> below just skips
-# quietly and compression falls back to its single-threaded core).
-<IfModule mod_headers.c>
-  Header set Cross-Origin-Opener-Policy "same-origin"
-  Header set Cross-Origin-Embedder-Policy "credentialless"
-</IfModule>
+# NOTE: this site does NOT set Cross-Origin-Opener-Policy /
+# Cross-Origin-Embedder-Policy, on purpose. An earlier version did, to
+# unlock ffmpeg.wasm's multi-threaded core in the admin panel's video
+# compactor (src/lib/videoCompression.ts) — several times faster, same
+# quality. That was reverted after it broke two things in production: the
+# YouTube/Vimeo <iframe> embeds on the public portfolio pages (COEP
+# requires embedded cross-origin frames to opt in with their own header,
+# which YouTube/Vimeo don't do for this site), and — on at least one real
+# browser (Microsoft Edge) — it blocked ffmpeg.wasm's own dedicated Worker
+# script from loading at all, hanging the compressor indefinitely on the
+# admin upload screen. Do not re-add these headers without solving both of
+# those problems first.
